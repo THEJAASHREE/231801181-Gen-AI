@@ -1,0 +1,46 @@
+!pip install -q langchain langchain-community langchain-huggingface faiss-cpu sentence-transformers pypdf
+
+from langchain_community.document_loaders import DirectoryLoader, TextLoader, PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+import os
+
+text_loader_kwargs = {'encoding': 'utf-8'}
+loader = DirectoryLoader(
+    path="./", 
+    glob="**/*.txt", 
+    loader_cls=TextLoader, 
+    loader_kwargs=text_loader_kwargs
+)
+pdf_loader = DirectoryLoader(
+    path="./", 
+    glob="**/*.pdf", 
+    loader_cls=PyPDFLoader
+)
+
+documents = loader.load() + pdf_loader.load()
+print(f"Loaded {len(documents)} total document objects.")
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=100
+)
+split_docs = splitter.split_documents(documents)
+print(f"Total chunks created: {len(split_docs)}")
+
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+vectorstore = FAISS.from_documents(
+    documents=split_docs,
+    embedding=embeddings
+)
+
+query = "What are the two pre-training tasks used for BERT?"
+results = vectorstore.similarity_search(query, k=3)
+
+for i, doc in enumerate(results, start=1):
+    print(f"\n--- Result {i} (Source: {doc.metadata.get('source')}) ---")
+    print(doc.page_content[:500] + "...")
